@@ -13,10 +13,11 @@ Transkun GUI is a graphical interface for **Transkun** https://github.com/Yujia-
 
 
 ## Getting Started
+To get the gui working you need Transkun (obvious) and FFMPEG.
 
-### Prerequisites
+1. To get Transkun you need python3 (for me, 3.12 is working) and run "pip3 install transkun" in your CLI,
 
-- Python 3.8+  
-- FFmpeg https://www.gyan.dev/ffmpeg/builds, installed in the .exe location  
-- Transkun backend installed separately with "pip3 install transkun command" 
+2. To get ffmpeg (release build) go to "https://www.gyan.dev/ffmpeg/builds" once downloaded, check in the bin folder and put ffmpeg's files: "ffmpeg.exe", "ffplay.exe", "ffprobe.exe" in the root directory of this folder (Transkun GUI folder)
+
+3. Done.
 
