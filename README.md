@@ -20,4 +20,5 @@ To get the gui working you need Transkun (obvious) and FFMPEG.
 2. To get ffmpeg (release build) go to "https://www.gyan.dev/ffmpeg/builds" once downloaded, check in the bin folder and put ffmpeg's files: "ffmpeg.exe", "ffplay.exe", "ffprobe.exe" in the root directory of this folder (Transkun GUI folder)
 
 3. Done.
-
+## info
+There is a standalone version in the release section.
