@@ -175,4 +175,16 @@ def listToIdx(l):
 
     return batchIndices
 
-
+def resolveOverlapping(events):
+    # Supprime les événements qui se chevauchent (par pitch)
+    from collections import defaultdict
+    events_by_pitch = defaultdict(list)
+    for e in sorted(events, key=lambda x: x.start):
+        overlap = False
+        for other in events_by_pitch[e.pitch]:
+            if not (e.end <= other.start or e.start >= other.end):
+                overlap = True
+                break
+        if not overlap:
+            events_by_pitch[e.pitch].append(e)
+    return sum(events_by_pitch.values(), [])
