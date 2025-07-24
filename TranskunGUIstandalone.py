@@ -9,6 +9,7 @@ import shutil
 import mimetypes
 import re
 import runpy
+import warnings
 
 base_dir = os.path.abspath(os.path.dirname(__file__))
 transkun_path = os.path.join(base_dir, "transkun")
@@ -26,7 +27,7 @@ default_options = {
     "use_weights_only": True,
     "use_reentrant": False,
     "requires_grad": True,
-    "device": "cuda"  # ajout device par défaut
+    "device": "cuda"  
 }
 
 def load_options():
@@ -53,7 +54,7 @@ class TranskunGUI:
         self.stop_requested = False
         self.drag_start_index = None
 
-        # liste file
+        # Frame liste fichiers + boutons
         frame_list = tk.Frame(root)
         frame_list.pack(padx=10, pady=5, fill="x")
 
@@ -62,7 +63,7 @@ class TranskunGUI:
         self.listbox = tk.Listbox(frame_list, height=8, activestyle="none")
         self.listbox.pack(side="left", fill="both", expand=True)
 
-        # liste edit 
+        # Events de drag & drop
         self.listbox.bind("<Button-1>", self.on_drag_start)
         self.listbox.bind("<B1-Motion>", self.on_drag_motion)
         self.listbox.bind("<ButtonRelease-1>", self.on_drag_release)
@@ -78,7 +79,7 @@ class TranskunGUI:
         tk.Button(frame_buttons, text="Delete selected file", command=self.remove_selected).pack(fill="x", pady=2)
         tk.Button(frame_buttons, text="Delete all files", command=self.clear_list).pack(fill="x", pady=2)
 
-        # option
+        # Bouton Options avancées
         tk.Button(frame_buttons, text="Advanced options", command=self.open_advanced_options).pack(fill="x", pady=10)
 
         # Progression
@@ -111,8 +112,9 @@ class TranskunGUI:
         tk.Label(root, text="").pack(anchor="w", padx=10)
         self.text_console = tk.Text(root, height=10, bg="white", fg="black", state=tk.DISABLED)
         self.text_console.pack(padx=10, pady=5, fill="both", expand=True)
+        self.log_widget = self.text_console
 
-        # start stop
+        # start/stop
         frame_controls = tk.Frame(root)
         frame_controls.pack(pady=10)
 
@@ -122,7 +124,7 @@ class TranskunGUI:
         self.btn_stop = tk.Button(frame_controls, text="Stop", command=self.stop_conversion, bg="red", fg="white", width=20, state=tk.DISABLED)
         self.btn_stop.pack(side="left", padx=5)
 
-        # log option on start
+        # display options at start
         self.log_options()
 
     def update_segmented_bar(self, current_idx, total):
@@ -157,7 +159,7 @@ class TranskunGUI:
             else:
                 self.listbox.itemconfig(i, {'fg': 'black'})
 
-    
+    # Drag and Drop in list file
     def on_drag_start(self, event):
         self.drag_start_index = self.listbox.nearest(event.y)
         self.drag_current_index = self.drag_start_index
@@ -165,28 +167,26 @@ class TranskunGUI:
     def on_drag_motion(self, event):
         target_index = self.listbox.nearest(event.y)
 
-        # Si cible interdite, on ignore et on ne change que la sélection
+        # if forbidden
         if target_index <= self.current_progress_idx:
-            target_index = self.drag_current_index  # on reste sur la dernière position valide
+            target_index = self.drag_current_index  # stay on last valid position
 
         if target_index != self.drag_current_index:
             self.drag_current_index = target_index
-            # On met à jour juste la sélection pour l'affichage
+            # display update
             self.listbox.selection_clear(0, 'end')
             self.listbox.selection_set(self.drag_start_index)
             self.listbox.activate(self.drag_start_index)
-            # it will be enough
 
 
     def on_drag_release(self, event):
         target_index = self.listbox.nearest(event.y)
 
         if target_index <= self.current_progress_idx:
-            # cancel move
+            # cancel move if forbiden
             target_index = self.drag_start_index
 
         if target_index != self.drag_start_index:
-            # move 
             self.file_queue[self.drag_start_index], self.file_queue[target_index] = \
                 self.file_queue[target_index], self.file_queue[self.drag_start_index]
             self.update_listbox()
@@ -194,7 +194,6 @@ class TranskunGUI:
         # reset
         self.drag_start_index = None
         self.drag_current_index = None
-        # update display
         self.listbox.selection_clear(0, 'end')
         self.listbox.selection_set(target_index)
         self.listbox.activate(target_index)
@@ -235,6 +234,14 @@ class TranskunGUI:
         self.text_console.see(tk.END)
         self.text_console.config(state=tk.DISABLED)
 
+    def log_replace_last(self, new_line):
+        """replace last ligne of widget log (for progress bar)."""
+        self.log_widget.config(state="normal")
+        self.log_widget.delete("end-2l", "end-1l")  
+        self.log_widget.insert("end", new_line + "\n")
+        self.log_widget.see("end")
+        self.log_widget.config(state="disabled")
+
     def log_options(self):
         self.log("⚙️ Current options :")
         self.log(f" - model.eval() : {'✔' if self.options.get('use_eval', True) else '✘'}")
@@ -243,10 +250,7 @@ class TranskunGUI:
         self.log(f" - requires_grad=True : {'✔' if self.options.get('requires_grad', True) else '✘'}")
         self.log(f" - device : {self.options.get('device', 'cuda')}")
     def get_unique_output_path(self, base_path):
-        """
-        Retourne un chemin vers un fichier qui n'écrase pas d'existant.
-        Si 'file.mid' existe, retourne 'file (1).mid', 'file (2).mid', etc.
-        """
+
         if not os.path.exists(base_path):
             return base_path
 
@@ -279,26 +283,98 @@ class TranskunGUI:
             self.btn_stop.config(state=tk.DISABLED)
             self.log("⏳ Stop task : conversions will stop after this current conversion")
 
+    def run_transkun_and_capture_progress(self, cmd):
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+
+            last_progress_line = None
+            skipping_warning_block = False
+
+            for raw_line in process.stdout:
+                line = raw_line.rstrip()
+
+                if not line.strip():
+                    continue
+
+                # Detection progress bar
+                if line.startswith("[Transkun] Progression:"):
+                    percent_pos = line.find('%')
+                    if percent_pos != -1:
+                        line = line[:percent_pos + 1]
+
+                    # display only in line change
+                    if line != last_progress_line:
+                        if last_progress_line is None:
+                            self.log(line)
+                        else:
+                            self.log_replace_last(line)
+                        last_progress_line = line
+
+                    skipping_warning_block = False
+                    continue
+
+                # Detection warning
+                if (
+                    "UserWarning" in line or
+                    "torch.load" in line or
+                    "eval_frame" in line or
+                    "return fn(" in line or
+                    "checkpoint =" in line or
+                    "warnings.warn" in line
+                ):
+                    skipping_warning_block = True
+                    continue
+
+                if skipping_warning_block:
+                    # intended or warning = skip
+                    if line.startswith("  ") or line.strip().endswith(")") or "Traceback" in line:
+                        continue
+                    else:
+                        skipping_warning_block = False  
+
+                # normal logs (➡️ Converting, ✅ Finished, etc.)
+                self.log(line)
+                last_progress_line = None  # reset to avoid accidental replace
+
+            process.wait()
+            return process.returncode
+
+        except Exception as e:
+            self.log(f"❌ Execution error: {e}")
+            return -1
+
+
+
 
     def convert_all_files(self):
+
         total = len(self.file_queue)
         self.current_progress_idx = 0
         self.update_segmented_bar(0, total)
         self.progress_total["maximum"] = total
         self.progress_label.config(text=f"0/{total}")
-    
+
         VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".webm")
-    
+
         try:
             for idx, original_path in enumerate(self.file_queue):
                 if self.stop_requested:
                     self.log("⏹️ Conversion stopped by user.")
                     break
-    
+
                 ext = os.path.splitext(original_path)[1].lower()
                 is_video = ext in VIDEO_EXTENSIONS
-                audio_path = original_path
-    
+                audio_path = original_path  
+                tmp_dir = None
+
+                # extract audio if video
                 if is_video:
                     self.log(f"🎞️ Video detected, extracting audio...")
                     try:
@@ -312,11 +388,13 @@ class TranskunGUI:
                     except Exception as e:
                         self.log(f"❌ Audio extraction error: {e}")
                         continue
-    
-                midi_path = self.get_unique_output_path(os.path.splitext(original_path)[0] + ".mid")
+
+                base_midi_path = os.path.splitext(original_path)[0] + ".mid"
+                midi_path = self.get_unique_output_path(base_midi_path)
+
                 device = self.options.get("device", "cuda")
                 self.log(f"➡️ Converting {os.path.basename(original_path)} with {device} ...")
-    
+
                 self.progress_file.start(10)
                 try:
                     cmd = ["transkun", audio_path, midi_path, "--device", device]
@@ -324,12 +402,15 @@ class TranskunGUI:
                         cmd.append("--no-eval")
                     if not self.options.get("use_weights_only", True):
                         cmd.append("--no-weights-only")
-    
-                    subprocess.run(cmd, check=True)
-                    self.log(f"✅ Finished : {os.path.basename(midi_path)}")
-    
+
+                    ret = self.run_transkun_and_capture_progress(cmd)
+                    if ret == 0:
+                        self.log(f"✅ Finished: {os.path.basename(midi_path)}")
+                    else:
+                        self.log(f"❌ Conversion error: Transkun exited with code {ret}")
+
                 except subprocess.CalledProcessError as e:
-                    self.log(f"❌ Error during conversion: {e}")
+                    self.log(f"❌ Conversion error: {e}")
                 except FileNotFoundError as e:
                     self.log(f"❌ Transkun not found: {e}")
                 except Exception as e:
@@ -344,7 +425,7 @@ class TranskunGUI:
                         shutil.rmtree(tmp_dir, ignore_errors=True)
                     if is_video:
                         shutil.rmtree(tmp_dir, ignore_errors=True)
-                    
+
         except Exception as e:
             self.log(f"❌ Fatal error during batch: {e}")
         finally:
@@ -352,6 +433,7 @@ class TranskunGUI:
             self.btn_stop.config(state=tk.DISABLED)
             if not self.stop_requested:
                 self.log("🎉 Conversion done.")
+
 
 
     def open_advanced_options(self):
