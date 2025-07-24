@@ -381,6 +381,5 @@ class TranskunGUI:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.iconbitmap("logo.ico")
     app = TranskunGUI(root)
     root.mainloop()
