@@ -222,6 +222,14 @@ class TranskunGUI:
         self.text_console.see(tk.END)
         self.text_console.config(state=tk.DISABLED)
 
+    def log_replace_last(self, new_line):
+        """replace last ligne of widget log (for progress bar)."""
+        self.log_widget.config(state="normal")
+        self.log_widget.delete("end-2l", "end-1l")  
+        self.log_widget.insert("end", new_line + "\n")
+        self.log_widget.see("end")
+        self.log_widget.config(state="disabled")
+
     def log_options(self):
         self.log("⚙️ Current options :")
         self.log(f" - model.eval() : {'✔' if self.options.get('use_eval', True) else '✘'}")
@@ -263,6 +271,73 @@ class TranskunGUI:
             self.btn_stop.config(state=tk.DISABLED)
             self.log("⏳ Stop task : conversions will stop after this current conversion")
 
+        def run_transkun_and_capture_progress(self, cmd):
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+
+            last_progress_line = None
+            skipping_warning_block = False
+
+            for raw_line in process.stdout:
+                line = raw_line.rstrip()
+
+                if not line.strip():
+                    continue
+
+                # Detection progress bar
+                if line.startswith("[Transkun] Progression:"):
+                    percent_pos = line.find('%')
+                    if percent_pos != -1:
+                        line = line[:percent_pos + 1]
+
+                    # display only in line change
+                    if line != last_progress_line:
+                        if last_progress_line is None:
+                            self.log(line)
+                        else:
+                            self.log_replace_last(line)
+                        last_progress_line = line
+
+                    skipping_warning_block = False
+                    continue
+
+                # Detection warning
+                if (
+                    "UserWarning" in line or
+                    "torch.load" in line or
+                    "eval_frame" in line or
+                    "return fn(" in line or
+                    "checkpoint =" in line or
+                    "warnings.warn" in line
+                ):
+                    skipping_warning_block = True
+                    continue
+
+                if skipping_warning_block:
+                    # intended or warning = skip
+                    if line.startswith("  ") or line.strip().endswith(")") or "Traceback" in line:
+                        continue
+                    else:
+                        skipping_warning_block = False  
+
+                # normal logs (➡️ Converting, ✅ Finished, etc.)
+                self.log(line)
+                last_progress_line = None  # reset to avoid accidental replace
+
+            process.wait()
+            return process.returncode
+
+        except Exception as e:
+            self.log(f"❌ Erreur d'exécution: {e}")
+            return -1
+
 
     def convert_all_files(self):
         total = len(self.file_queue)
@@ -270,21 +345,21 @@ class TranskunGUI:
         self.update_segmented_bar(0, total)
         self.progress_total["maximum"] = total
         self.progress_label.config(text=f"0/{total}")
-    
+
         VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".webm")
-    
+
         try:
             for idx, original_path in enumerate(self.file_queue):
                 if self.stop_requested:
                     self.log("⏹️ Conversion stopped by user.")
                     break
-    
+
                 ext = os.path.splitext(original_path)[1].lower()
                 is_video = ext in VIDEO_EXTENSIONS
-                audio_path = original_path  # par défaut
+                audio_path = original_path  
                 tmp_dir = None
-    
-                # Extraction audio si vidéo
+
+                # extract audio if video
                 if is_video:
                     self.log(f"🎞️ Video detected, extracting audio...")
                     try:
@@ -298,13 +373,13 @@ class TranskunGUI:
                     except Exception as e:
                         self.log(f"❌ Extraction audio error: {e}")
                         continue
-    
+
                 base_midi_path = os.path.splitext(original_path)[0] + ".mid"
                 midi_path = self.get_unique_output_path(base_midi_path)
-    
+
                 device = self.options.get("device", "cuda")
                 self.log(f"➡️ Converting {os.path.basename(original_path)} with {device} ...")
-    
+
                 self.progress_file.start(10)
                 try:
                     cmd = ["transkun", audio_path, midi_path, "--device", device]
@@ -312,9 +387,13 @@ class TranskunGUI:
                         cmd.append("--no-eval")
                     if not self.options.get("use_weights_only", True):
                         cmd.append("--no-weights-only")
-    
-                    subprocess.run(cmd, check=True)
-                    self.log(f"✅ Finished: {os.path.basename(midi_path)}")
+
+                    ret = self.run_transkun_and_capture_progress(cmd)
+                    if ret == 0:
+                        self.log(f"✅ Finished: {os.path.basename(midi_path)}")
+                    else:
+                        self.log(f"❌ Conversion error: Transkun exited with code {ret}")
+
                 except subprocess.CalledProcessError as e:
                     self.log(f"❌ Conversion error: {e}")
                 except FileNotFoundError as e:
@@ -329,7 +408,9 @@ class TranskunGUI:
                     self.progress_label.config(text=f"{idx + 1}/{total}")
                     if tmp_dir:
                         shutil.rmtree(tmp_dir, ignore_errors=True)
-    
+                    if is_video:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+
         except Exception as e:
             self.log(f"❌ Fatal error during batch: {e}")
         finally:
