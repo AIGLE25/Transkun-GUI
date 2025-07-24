@@ -53,7 +53,7 @@ class TranskunGUI:
         self.stop_requested = False
         self.drag_start_index = None
 
-        # Frame liste fichiers + boutons
+        # liste file
         frame_list = tk.Frame(root)
         frame_list.pack(padx=10, pady=5, fill="x")
 
@@ -62,7 +62,7 @@ class TranskunGUI:
         self.listbox = tk.Listbox(frame_list, height=8, activestyle="none")
         self.listbox.pack(side="left", fill="both", expand=True)
 
-        # Events de drag & drop
+        # liste edit 
         self.listbox.bind("<Button-1>", self.on_drag_start)
         self.listbox.bind("<B1-Motion>", self.on_drag_motion)
         self.listbox.bind("<ButtonRelease-1>", self.on_drag_release)
@@ -78,7 +78,7 @@ class TranskunGUI:
         tk.Button(frame_buttons, text="Delete selected file", command=self.remove_selected).pack(fill="x", pady=2)
         tk.Button(frame_buttons, text="Delete all files", command=self.clear_list).pack(fill="x", pady=2)
 
-        # Bouton Options avancées
+        # option
         tk.Button(frame_buttons, text="Advanced options", command=self.open_advanced_options).pack(fill="x", pady=10)
 
         # Progression
@@ -112,7 +112,7 @@ class TranskunGUI:
         self.text_console = tk.Text(root, height=10, bg="white", fg="black", state=tk.DISABLED)
         self.text_console.pack(padx=10, pady=5, fill="both", expand=True)
 
-        # Boutons start / stop
+        # start stop
         frame_controls = tk.Frame(root)
         frame_controls.pack(pady=10)
 
@@ -122,7 +122,7 @@ class TranskunGUI:
         self.btn_stop = tk.Button(frame_controls, text="Stop", command=self.stop_conversion, bg="red", fg="white", width=20, state=tk.DISABLED)
         self.btn_stop.pack(side="left", padx=5)
 
-        # Affiche les options une fois au démarrage
+        # log option on start
         self.log_options()
 
     def update_segmented_bar(self, current_idx, total):
@@ -157,7 +157,7 @@ class TranskunGUI:
             else:
                 self.listbox.itemconfig(i, {'fg': 'black'})
 
-    # Drag and Drop
+    
     def on_drag_start(self, event):
         self.drag_start_index = self.listbox.nearest(event.y)
         self.drag_current_index = self.drag_start_index
@@ -175,27 +175,26 @@ class TranskunGUI:
             self.listbox.selection_clear(0, 'end')
             self.listbox.selection_set(self.drag_start_index)
             self.listbox.activate(self.drag_start_index)
-            # Optionnel : tu peux afficher une ligne verticale ou un indicateur
-            # pour montrer où sera inséré l'élément (mais ce n'est pas obligatoire)
+            # it will be enough
 
 
     def on_drag_release(self, event):
         target_index = self.listbox.nearest(event.y)
 
         if target_index <= self.current_progress_idx:
-            # zone interdite, on annule le déplacement
+            # cancel move
             target_index = self.drag_start_index
 
         if target_index != self.drag_start_index:
-            # On effectue l'échange réel dans la liste
+            # move 
             self.file_queue[self.drag_start_index], self.file_queue[target_index] = \
                 self.file_queue[target_index], self.file_queue[self.drag_start_index]
             self.update_listbox()
 
-        # Remise à zéro
+        # reset
         self.drag_start_index = None
         self.drag_current_index = None
-        # Remise à jour de la sélection finale
+        # update display
         self.listbox.selection_clear(0, 'end')
         self.listbox.selection_set(target_index)
         self.listbox.activate(target_index)
@@ -331,16 +330,23 @@ class TranskunGUI:
     
                 except subprocess.CalledProcessError as e:
                     self.log(f"❌ Error during conversion: {e}")
+                except FileNotFoundError as e:
+                    self.log(f"❌ Transkun not found: {e}")
+                except Exception as e:
+                    self.log(f"❌ Unexpected error: {e}")
                 finally:
                     self.progress_file.stop()
                     self.current_progress_idx = idx + 1
                     self.update_listbox_colors(self.current_progress_idx)
                     self.update_segmented_bar(self.current_progress_idx, total)
                     self.progress_label.config(text=f"{idx + 1}/{total}")
-    
+                    if tmp_dir:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
                     if is_video:
                         shutil.rmtree(tmp_dir, ignore_errors=True)
-    
+                    
+        except Exception as e:
+            self.log(f"❌ Fatal error during batch: {e}")
         finally:
             self.btn_start.config(state=tk.NORMAL)
             self.btn_stop.config(state=tk.DISABLED)
