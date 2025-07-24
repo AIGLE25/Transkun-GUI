@@ -284,75 +284,68 @@ class TranskunGUI:
     def convert_all_files(self):
         total = len(self.file_queue)
         self.current_progress_idx = 0
-        self.update_segmented_bar(0, total)  # On démarre à 0 (aucun fichier converti)
+        self.update_segmented_bar(0, total)
         self.progress_total["maximum"] = total
         self.progress_label.config(text=f"0/{total}")
-
+    
         VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov", ".avi", ".webm")
-
-        for idx, original_path in enumerate(self.file_queue):
-            if self.stop_requested:
-                self.log("⏹️ Conversion stopped by user.")
-                break
-
-
-            # Détection si c’est une vidéo
-            ext = os.path.splitext(original_path)[1].lower()
-            is_video = ext in VIDEO_EXTENSIONS
-
-            audio_path = original_path  # par défaut
-
-            # Si vidéo, on extrait l’audio en .wav temporaire
-            if is_video:
-                self.log(f"🎞️ Video detected, extracting audio...")
-                try:
-                    tmp_dir = tempfile.mkdtemp()
-                    audio_path = os.path.join(tmp_dir, "extracted.wav")
-                    ffmpeg_cmd = [
-                        "ffmpeg", "-y", "-i", original_path,
-                        "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", audio_path
-                    ]
-                    subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                except Exception as e:
-                    self.log(f"❌ Extraction audio error : {e}")
-                    continue
-
-            base_midi_path = os.path.splitext(original_path)[0] + ".mid"
-            midi_path = self.get_unique_output_path(base_midi_path)
-
-            device = self.options.get("device", "cuda")
-            self.log(f"➡️ Converting {os.path.basename(original_path)} with {device} ...")
-
-            self.progress_file.start(10)
-            try:
-                args = [audio_path, midi_path, "--device", device]
-                if not self.options.get("use_eval", True):
-                    args.append("--no-eval")
-                if not self.options.get("use_weights_only", True):
-                    args.append("--no-weights-only")
-
-                run_transkun(args)
-                self.log(f"✅ Finished : {os.path.basename(midi_path)}")
-            except subprocess.CalledProcessError as e:
-                self.log(f"❌ Error {os.path.basename(original_path)} : {e}")
-            finally:
-                self.progress_file.stop()
-                self.current_progress_idx = idx + 1
-                self.update_listbox_colors(self.current_progress_idx)
-
-                self.update_segmented_bar(self.current_progress_idx, total)
-                self.progress_label.config(text=f"{idx + 1}/{total}")
-
-
-                # Nettoyage si fichier temporaire
+    
+        try:
+            for idx, original_path in enumerate(self.file_queue):
+                if self.stop_requested:
+                    self.log("⏹️ Conversion stopped by user.")
+                    break
+    
+                ext = os.path.splitext(original_path)[1].lower()
+                is_video = ext in VIDEO_EXTENSIONS
+                audio_path = original_path
+    
                 if is_video:
-                    shutil.rmtree(tmp_dir, ignore_errors=True)
-
-        self.btn_start.config(state=tk.NORMAL)
-        self.btn_stop.config(state=tk.DISABLED)
-
-        if not self.stop_requested:
-            self.log("🎉 Conversion done.")
+                    self.log(f"🎞️ Video detected, extracting audio...")
+                    try:
+                        tmp_dir = tempfile.mkdtemp()
+                        audio_path = os.path.join(tmp_dir, "extracted.wav")
+                        ffmpeg_cmd = [
+                            "ffmpeg", "-y", "-i", original_path,
+                            "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2", audio_path
+                        ]
+                        subprocess.run(ffmpeg_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                    except Exception as e:
+                        self.log(f"❌ Audio extraction error: {e}")
+                        continue
+    
+                midi_path = self.get_unique_output_path(os.path.splitext(original_path)[0] + ".mid")
+                device = self.options.get("device", "cuda")
+                self.log(f"➡️ Converting {os.path.basename(original_path)} with {device} ...")
+    
+                self.progress_file.start(10)
+                try:
+                    cmd = ["transkun", audio_path, midi_path, "--device", device]
+                    if not self.options.get("use_eval", True):
+                        cmd.append("--no-eval")
+                    if not self.options.get("use_weights_only", True):
+                        cmd.append("--no-weights-only")
+    
+                    subprocess.run(cmd, check=True)
+                    self.log(f"✅ Finished : {os.path.basename(midi_path)}")
+    
+                except subprocess.CalledProcessError as e:
+                    self.log(f"❌ Error during conversion: {e}")
+                finally:
+                    self.progress_file.stop()
+                    self.current_progress_idx = idx + 1
+                    self.update_listbox_colors(self.current_progress_idx)
+                    self.update_segmented_bar(self.current_progress_idx, total)
+                    self.progress_label.config(text=f"{idx + 1}/{total}")
+    
+                    if is_video:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+    
+        finally:
+            self.btn_start.config(state=tk.NORMAL)
+            self.btn_stop.config(state=tk.DISABLED)
+            if not self.stop_requested:
+                self.log("🎉 Conversion done.")
 
 
     def open_advanced_options(self):
