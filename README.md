@@ -1,4 +1,4 @@
-# Transkun-GUI
+# Transkun-GUI-Standalone
 A simple GUI for Transkun Expresive Piano Transcription tool.
 
 Transkun GUI is a graphical interface for **Transkun** https://github.com/Yujia-Yan/Transkun, a tool that converts audio and video files into MIDI format. This project focuses solely on the **GUI part**, providing an interface for batch conversion and some advanced options.
