@@ -177,7 +177,7 @@ def listToIdx(l):
 
 #@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 def resolveOverlapping(events):
-    # Supprime les événements qui se chevauchent (par pitch)
+
     from collections import defaultdict
     events_by_pitch = defaultdict(list)
     for e in sorted(events, key=lambda x: x.start):
