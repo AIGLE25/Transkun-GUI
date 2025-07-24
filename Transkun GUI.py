@@ -8,6 +8,7 @@ import tempfile
 import shutil
 import mimetypes
 import re
+import warnings
 
 OPTIONS_FILE = "options.json"
 
@@ -101,6 +102,7 @@ class TranskunGUI:
         tk.Label(root, text="").pack(anchor="w", padx=10)
         self.text_console = tk.Text(root, height=10, bg="white", fg="black", state=tk.DISABLED)
         self.text_console.pack(padx=10, pady=5, fill="both", expand=True)
+        self.log_widget = self.text_console
 
         # start/stop
         frame_controls = tk.Frame(root)
@@ -221,7 +223,7 @@ class TranskunGUI:
         self.text_console.insert(tk.END, text + "\n")
         self.text_console.see(tk.END)
         self.text_console.config(state=tk.DISABLED)
-
+#@@@@@@@@@@@@@@@@@@@@@@
     def log_replace_last(self, new_line):
         """replace last ligne of widget log (for progress bar)."""
         self.log_widget.config(state="normal")
@@ -229,7 +231,7 @@ class TranskunGUI:
         self.log_widget.insert("end", new_line + "\n")
         self.log_widget.see("end")
         self.log_widget.config(state="disabled")
-
+#@@@@@@@@@@@@@@@@@@@@@@
     def log_options(self):
         self.log("⚙️ Current options :")
         self.log(f" - model.eval() : {'✔' if self.options.get('use_eval', True) else '✘'}")
@@ -270,8 +272,8 @@ class TranskunGUI:
             self.stop_requested = True
             self.btn_stop.config(state=tk.DISABLED)
             self.log("⏳ Stop task : conversions will stop after this current conversion")
-
-        def run_transkun_and_capture_progress(self, cmd):
+#@@@@@@@@@@@@@@@@@@@@@@
+    def run_transkun_and_capture_progress(self, cmd):
         try:
             process = subprocess.Popen(
                 cmd,
@@ -337,9 +339,12 @@ class TranskunGUI:
         except Exception as e:
             self.log(f"❌ Erreur d'exécution: {e}")
             return -1
+#@@@@@@@@@@@@@@@@@@@@@@
+
 
 
     def convert_all_files(self):
+
         total = len(self.file_queue)
         self.current_progress_idx = 0
         self.update_segmented_bar(0, total)
@@ -356,7 +361,7 @@ class TranskunGUI:
 
                 ext = os.path.splitext(original_path)[1].lower()
                 is_video = ext in VIDEO_EXTENSIONS
-                audio_path = original_path  
+                audio_path = original_path  # par défaut
                 tmp_dir = None
 
                 # extract audio if video
@@ -418,6 +423,7 @@ class TranskunGUI:
             self.btn_stop.config(state=tk.DISABLED)
             if not self.stop_requested:
                 self.log("🎉 Conversion done.")
+
 
 
     def open_advanced_options(self):
