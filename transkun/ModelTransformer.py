@@ -726,124 +726,97 @@ class TransKun(torch.nn.Module):
 
 
 
-    def transcribe(self, x, stepInSecond = None, segmentSizeInSecond = None, discardSecondHalf=False, mergeIncompleteEvent = True):
-
+    def transcribe(self, x, stepInSecond=None, segmentSizeInSecond=None, discardSecondHalf=False, mergeIncompleteEvent=True):
+        import math
+        import torch.nn.functional as F
+        from collections import defaultdict
+        from .Util import makeFrame, resolveOverlapping
+        import sys
 
         if stepInSecond is None and segmentSizeInSecond is None:
             stepInSecond = self.segmentHopSizeInSecond
             segmentSizeInSecond = self.segmentSizeInSecond
 
-        x= x.transpose(-1,-2)
+        x = x.transpose(-1, -2)
 
-        # gain normalization
-        # x = (x-x.mean())/(x.std()+1e-8)
-
-        padTimeBegin = (segmentSizeInSecond-stepInSecond)
-
-        x = F.pad(x, (math.ceil(padTimeBegin*self.fs), math.ceil(self.fs* (padTimeBegin))))
+        padTimeBegin = (segmentSizeInSecond - stepInSecond)
+        x = F.pad(x, (math.ceil(padTimeBegin * self.fs), math.ceil(self.fs * (padTimeBegin))))
 
         nSample = x.shape[-1]
-        
+        stepSize = math.ceil(stepInSecond * self.fs / self.hopSize) * self.hopSize
+        segmentSize = math.ceil(segmentSizeInSecond * self.fs)
 
-        eventsAll= []
+        totalSegments = math.ceil(nSample / stepSize)
 
-        eventsByType= defaultdict(list)
-        startFrameIdx = math.floor(padTimeBegin*self.fs/self.hopSize)
-        startPos = [startFrameIdx]* len(self.targetMIDIPitch)
-        # startPos =None
+        eventsAll = []
+        eventsByType = defaultdict(list)
+        startFrameIdx = math.floor(padTimeBegin * self.fs / self.hopSize)
+        startPos = [startFrameIdx] * len(self.targetMIDIPitch)
 
-        stepSize = math.ceil(stepInSecond*self.fs/self.hopSize)*self.hopSize
-        segmentSize = math.ceil(segmentSizeInSecond*self.fs)
+        for segIndex, i in enumerate(range(0, nSample, stepSize), 1):
+            # Affichage barre de progression console
+            percent = int(segIndex / totalSegments * 100)
+            bar_len = 30
+            filled_len = int(bar_len * percent // 100)
+            bar = '+' * filled_len + '-' * (bar_len - filled_len)
+            sys.stdout.write(f'\r[Transkun] Progression: [{bar}] {percent}%')
+            sys.stdout.flush()
 
-        for i in range(0, nSample, stepSize):
-            # t1 = time.time()
-
-            j = min(i+ segmentSize, nSample)
-            # print(i, j)
-
-
-            beginTime = (i)/ self.fs -padTimeBegin
-            # print(beginTime)
+            j = min(i + segmentSize, nSample)
+            beginTime = i / self.fs - padTimeBegin
 
             curSlice = x[:, i:j]
-            if curSlice.shape[-1]< segmentSize:
-                # pad to the segmentSize
-                curSlice = F.pad(curSlice, (0, segmentSize- curSlice.shape[-1]))
-
+            if curSlice.shape[-1] < segmentSize:
+                curSlice = F.pad(curSlice, (0, segmentSize - curSlice.shape[-1]))
 
             curFrames = makeFrame(curSlice, self.hopSize, self.windowSize)
+            lastFrameIdx = round(segmentSize / self.hopSize)
 
-            lastFrameIdx = round(segmentSize/self.hopSize)
-            # # print(curSlice.shape)
-            # # print(startPos)
-            # startPos = None
-            if discardSecondHalf:
-                onsetBound = stepSize
-            else:
-                onsetBound = None
+            onsetBound = stepSize if discardSecondHalf else None
 
-            curEvents, lastP = self.transcribeFrames(curFrames.unsqueeze(0), forcedStartPos = startPos, velocityCriteron = "hamming", onsetBound= onsetBound, lastFrameIdx = lastFrameIdx)
+            curEvents, lastP = self.transcribeFrames(
+                curFrames.unsqueeze(0),
+                forcedStartPos=startPos,
+                velocityCriteron="hamming",
+                onsetBound=onsetBound,
+                lastFrameIdx=lastFrameIdx
+            )
             curEvents = curEvents[0]
 
+            startPos = [max(k - int(stepSize / self.hopSize), 0) for k in lastP]
 
-            startPos = []
-            for k in lastP:
-                startPos.append(max(k-int(stepSize/self.hopSize), 0))
-
-            # # shift all notes by beginTime
-            for e in  curEvents:
+            for e in curEvents:
                 e.start += beginTime
-                e.end  += beginTime 
-
+                e.end += beginTime
                 e.start = max(e.start, 0)
                 e.end = max(e.end, e.start)
-                # print(e.start, e.end, e.pitch, e.hasOnset, e.hasOffset)
-
 
             for e in curEvents:
                 if mergeIncompleteEvent:
-                    if len(eventsByType[e.pitch])>0:
+                    if len(eventsByType[e.pitch]) > 0:
                         last_e = eventsByType[e.pitch][-1]
-
-                        # test if e overlap with the last event 
                         if e.start < last_e.end:
-
-
-                            if e.hasOnset: #and e.hasOffset:
+                            if e.hasOnset:
                                 eventsByType[e.pitch][-1] = e
                             else:
-                                # merge two events
                                 eventsByType[e.pitch][-1].hasOffset = e.hasOffset
                                 eventsByType[e.pitch][-1].end = max(e.end, last_e.end)
-                                # eventsByType[e.pitch][-1].end = max(e.end, last_e.end)
-
                             continue
-
 
                 if e.hasOnset:
                     eventsByType[e.pitch].append(e)
-            
-
 
             eventsAll.extend(curEvents)
 
-        # handling incomplete events in the last segment
+        print()  # line jump at end
+
         for eventType in eventsByType:
-            if len(eventsByType[eventType])>0:
+            if len(eventsByType[eventType]) > 0:
                 eventsByType[eventType][-1].hasOffset = True
 
-        # flatten all events
         eventsAll = sum(eventsByType.values(), [])
-
-
-
-        # post filtering
         eventsAll = [n for n in eventsAll if n.hasOffset]
-
         eventsAll = resolveOverlapping(eventsAll)
-
-
-
 
         return eventsAll
 
