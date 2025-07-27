@@ -312,8 +312,9 @@ class TranskunGUI:
 
 
     def can_move_file(self, index):
-    # Return True if file index is "pending"
-     return self.file_queue[index]["status"] in ("pending", "ignored", "skipped")
+        if index < 0 or index >= len(self.file_queue):
+            return False
+        return self.file_queue[index]["status"] in ("pending", "ignored", "skipped")
 
     def on_drag_start(self, event):
         idx = self.listbox.nearest(event.y)
