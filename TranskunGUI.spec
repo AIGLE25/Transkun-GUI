@@ -17,7 +17,13 @@ a = Analysis(
         'torch_optimizer',
         'mir_eval',
         'pydub',
-        'numpy'
+        'numpy',
+        'warnings',
+        'math',
+        'sys',
+        'base64',
+        'io',
+        'PIL'
     ],
     hookspath=[],
     runtime_hooks=[],
@@ -39,7 +45,9 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,  
+    console=True,
+    icon='logo.ico'
+
 )
 
 coll = COLLECT(
