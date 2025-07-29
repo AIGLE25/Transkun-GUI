@@ -481,15 +481,6 @@ class TranskunGUI:
         if messagebox.askyesno("STOP", "Confirm ?"):
             self.stop_requested = True
             self.btn_stop.config(state=tk.DISABLED)
-            # self.log("⏳ Stop task")
-
-            # Immediate interruption if a process is running
-            if hasattr(self, "current_process") and self.current_process and self.current_process.poll() is None:
-                try:
-                    # self.log("⛔ Interruption of the current file...")
-                    self.current_process.terminate()
-                except Exception as e:
-                    self.log(f"⚠️ Unable to interrupt the process : {e}")
 
     def run_transkun_and_capture_progress(self, cmd):
         try:
@@ -513,9 +504,9 @@ class TranskunGUI:
                     continue
 
                 if self.stop_requested:
-                    process.terminate()
-                    process.wait()
+
                     return -1
+
 
                 if self.skip_requested:
                     self.skip_requested = False
@@ -524,8 +515,8 @@ class TranskunGUI:
                         self.log(f"⏭ Skipped by user: {os.path.basename(self.currently_processing_entry['path'])}")
                         self.update_listbox()
                         self.update_segmented_bar()
-                    process.terminate()
-                    process.wait()
+
+
                     return -3
 
 
@@ -533,13 +524,11 @@ class TranskunGUI:
                     path = self.currently_processing_entry.get('path')
                     if not path or not os.path.exists(path):
                         self.log(f"⛔ skipping Missing file {os.path.basename(path) if path else '(unknown)'}")
-                        process.terminate()
-                        process.wait()
+
                         return -2
                 if self.currently_processing_entry not in self.file_queue:
                     self.log("⚠️ File removed from the list during conversion, moving on to the next one.")
-                    process.terminate()
-                    process.wait()
+
                     return -3
 
                 if line.startswith("[Transkun] Progression:"):
@@ -594,7 +583,6 @@ class TranskunGUI:
 
         finally:
             self.current_process = None
-
     def convert_all_files(self):
         self.conversion_started = True
         VIDEO_EXTENSIONS = (
