@@ -27,6 +27,6 @@ To get the gui working you need Transkun (obvious) and FFMPEG.
 Use: https://pypi.org/project/auto-py-to-exe to build it
 
 ## info
-There is a standalone version in the release section (or in the standalone branch for code).
+There is a standalone version in the release section (only the 0.0.1 work for now).
 
 
