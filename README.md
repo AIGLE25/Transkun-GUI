@@ -29,4 +29,4 @@ Use: https://pypi.org/project/auto-py-to-exe to build it
 ## info
 There is a standalone version in the release section (only the 0.0.1 work for now).
 
-
+Made with big help of AI.
